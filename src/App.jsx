@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { supabase } from './supabase'
 
 const fontLink = document.createElement("link");
 fontLink.rel = "stylesheet";
@@ -13,7 +14,6 @@ const T = {
   green:"#4ADE80", red:"#F87171", yellow:"#FACC15", stars:"#7BA7D4",
 };
 
-// Sakura theme
 const SK = {
   pink:"#F9A8D4", pinkDeep:"#EC4899", pinkSoft:"#FDF2F8",
   pinkGlow:"rgba(249,168,212,0.15)", pinkBorder:"rgba(249,168,212,0.25)",
@@ -52,12 +52,25 @@ const DEFAULT_LOTS = [
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 async function loadData() {
-  try { const r = await window.storage.get("hiroba_v3"); return r ? JSON.parse(r.value) : null; }
-  catch { return null; }
+  try {
+    const { data: lotsData } = await supabase.from('lots').select('*');
+    const { data: ideasData } = await supabase.from('ideas').select('*');
+    if (!lotsData || lotsData.length === 0) return null;
+    const ideas = {};
+    ideasData?.forEach(i => {
+      // normalize created_at -> createdAt for compatibility
+      const idea = { ...i, createdAt: i.createdAt || i.created_at };
+      if (!ideas[i.lot_id]) ideas[i.lot_id] = [];
+      ideas[i.lot_id].push(idea);
+    });
+    return { lots: lotsData, ideas };
+  } catch { return null; }
 }
-async function saveData(d) {
-  try { await window.storage.set("hiroba_v3", JSON.stringify(d)); } catch {}
+
+async function seedDefaultLots() {
+  await supabase.from('lots').insert(DEFAULT_LOTS);
 }
+
 async function loadSakura() {
   try { const r = await window.storage.get("sakura_cards"); return r ? JSON.parse(r.value) : []; }
   catch { return []; }
@@ -184,23 +197,22 @@ export default function Hiroba() {
   const [runningId,setRunningId]   = useState(null);
   const [outputs,setOutputs]       = useState({});
   const [showHiroshi,setShowHiroshi]   = useState(false);
-  // Sakura
   const [sakuraCards,setSakuraCards]   = useState([]);
-  const [sakuraView,setSakuraView]     = useState("cards"); // cards | practice
+  const [sakuraView,setSakuraView]     = useState("cards");
   const [showAddCard,setShowAddCard]   = useState(false);
   const [editingCard,setEditingCard]   = useState(null);
   const [filterCat,setFilterCat]       = useState("all");
 
   useEffect(()=>{
     loadData().then(d=>{
-      if(d){setLots(d.lots||DEFAULT_LOTS);setIdeas(d.ideas||{});}
-      else{setLots(DEFAULT_LOTS);setIdeas({});}
+      if(d){ setLots(d.lots||DEFAULT_LOTS); setIdeas(d.ideas||{}); }
+      else { seedDefaultLots(); setLots(DEFAULT_LOTS); setIdeas({}); }
       setLoaded(true);
     });
     loadSakura().then(setSakuraCards);
   },[]);
-  useEffect(()=>{if(loaded) saveData({lots,ideas});},[lots,ideas,loaded]);
-  useEffect(()=>{if(loaded) saveSakura(sakuraCards);},[sakuraCards,loaded]);
+
+  useEffect(()=>{ if(loaded) saveSakura(sakuraCards); },[sakuraCards,loaded]);
 
   const currentLot=lots.find(l=>l.id===activeLot);
   const currentIdeas=activeLot?(ideas[activeLot]||[]):[];
@@ -214,16 +226,35 @@ export default function Hiroba() {
         .map(i=>({...i,lotName:lot.name,lotEmoji:lot.emoji,lotAccent:lot.accent})))
     :[];
 
-  function addIdea(data){const idea={id:Date.now().toString(),...data,createdAt:Date.now()};setIdeas(p=>({...p,[activeLot]:[idea,...(p[activeLot]||[])]}));}
-  function updateIdea(id,data){setIdeas(p=>({...p,[activeLot]:p[activeLot].map(i=>i.id===id?{...i,...data}:i)}));}
-  function deleteIdea(lotId,id){setIdeas(p=>({...p,[lotId]:p[lotId].filter(i=>i.id!==id)}));setOutputs(p=>{const n={...p};delete n[id];return n;});}
-  function addLot(name,emoji){
+  async function addIdea(data) {
+    const idea = { id: Date.now().toString(), ...data, createdAt: Date.now(), lot_id: activeLot };
+    await supabase.from('ideas').insert([idea]);
+    setIdeas(p=>({...p,[activeLot]:[idea,...(p[activeLot]||[])]}));
+  }
+  async function updateIdea(id, data) {
+    await supabase.from('ideas').update(data).eq('id', id);
+    setIdeas(p=>({...p,[activeLot]:p[activeLot].map(i=>i.id===id?{...i,...data}:i)}));
+  }
+  async function deleteIdea(lotId, id) {
+    await supabase.from('ideas').delete().eq('id', id);
+    setIdeas(p=>({...p,[lotId]:p[lotId].filter(i=>i.id!==id)}));
+    setOutputs(p=>{const n={...p};delete n[id];return n;});
+  }
+  async function addLot(name, emoji) {
     const id=`lot_${Date.now()}`;
     const opts=["#F472B6","#34D399","#A78BFA","#FB923C","#60A5FA","#FBBF24"];
     const accent=opts[Math.floor(Math.random()*opts.length)];
-    setLots(p=>[...p,{id,name,emoji,accent,glow:`${accent}22`}]);
+    const lot={id,name,emoji,accent,glow:`${accent}22`};
+    await supabase.from('lots').insert([lot]);
+    setLots(p=>[...p,lot]);
   }
-  function deleteLot(id){setLots(p=>p.filter(l=>l.id!==id));setIdeas(p=>{const n={...p};delete n[id];return n;});if(activeLot===id)setActiveLot(null);}
+  async function deleteLot(id) {
+    await supabase.from('lots').delete().eq('id', id);
+    setLots(p=>p.filter(l=>l.id!==id));
+    setIdeas(p=>{const n={...p};delete n[id];return n;});
+    if(activeLot===id) setActiveLot(null);
+  }
+
   function copyCode(idea){navigator.clipboard.writeText(idea.body);setCopiedId(idea.id);setTimeout(()=>setCopiedId(null),2000);}
   async function handleRun(idea){
     if(runningId) return;
@@ -392,10 +423,8 @@ export default function Hiroba() {
 // ── Sakura World ──────────────────────────────────────────────────────────────
 function SakuraWorld({cards,view,setView,filterCat,setFilterCat,onAddCard,onEditCard,onDeleteCard,onUpdateCard,onOpenHiroshi}) {
   const filtered = filterCat==="all"?cards:cards.filter(c=>c.category===filterCat);
-
   return(
     <main style={{...S.main, paddingTop:24}}>
-      {/* Sakura Header */}
       <div style={{textAlign:"center",marginBottom:28,padding:"20px 0"}}>
         <div style={{fontSize:40,marginBottom:8,animation:"petalFall 3s ease-in-out infinite"}}>🌸</div>
         <div style={{fontFamily:"'Noto Serif JP',serif",fontSize:26,color:SK.pink,letterSpacing:4,marginBottom:4}}>さくらの世界</div>
@@ -413,10 +442,8 @@ function SakuraWorld({cards,view,setView,filterCat,setFilterCat,onAddCard,onEdit
           </button>
         </div>
       </div>
-
       {view==="cards"&&(
         <>
-          {/* Category filter */}
           <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
             <button onClick={()=>setFilterCat("all")}
               style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${filterCat==="all"?SK.pink:SK.border}`,background:filterCat==="all"?"rgba(249,168,212,0.12)":"transparent",color:filterCat==="all"?SK.pink:"rgba(249,168,212,0.4)",cursor:"pointer",fontSize:12,fontFamily:"'Zen Kaku Gothic New',sans-serif"}}>
@@ -429,8 +456,6 @@ function SakuraWorld({cards,view,setView,filterCat,setFilterCat,onAddCard,onEdit
               </button>
             ))}
           </div>
-
-          {/* Cards grid */}
           {filtered.length===0
             ?<div style={{textAlign:"center",paddingTop:60}}>
               <div style={{fontSize:40}}>🌸</div>
@@ -443,17 +468,13 @@ function SakuraWorld({cards,view,setView,filterCat,setFilterCat,onAddCard,onEdit
               ))}
             </div>
           }
-
           <button onClick={onAddCard}
             style={{position:"fixed",bottom:100,right:28,display:"flex",alignItems:"center",gap:8,padding:"12px 20px",borderRadius:28,background:`linear-gradient(135deg,${SK.pinkDeep},#BE185D)`,border:"none",color:"white",cursor:"pointer",fontFamily:"'Zen Kaku Gothic New',sans-serif",fontWeight:700,fontSize:14,boxShadow:"0 4px 20px rgba(236,72,153,0.4)",zIndex:100,animation:"floatPulse 3s ease-in-out infinite"}}>
             {IC.plus} カードを追加
           </button>
         </>
       )}
-
-      {view==="practice"&&(
-        <PracticeMode cards={cards} onUpdateCard={onUpdateCard}/>
-      )}
+      {view==="practice"&&<PracticeMode cards={cards} onUpdateCard={onUpdateCard}/>}
     </main>
   );
 }
@@ -465,7 +486,6 @@ function SakuraCard({card,onEdit,onDelete}) {
   return(
     <div style={{perspective:"1000px",cursor:"pointer",height:180}} onClick={()=>setFlipped(f=>!f)}>
       <div style={{position:"relative",width:"100%",height:"100%",transformStyle:"preserve-3d",transition:"transform 0.5s ease",transform:flipped?"rotateY(180deg)":"rotateY(0)"}}>
-        {/* Front */}
         <div style={{position:"absolute",inset:0,backfaceVisibility:"hidden",borderRadius:16,padding:"20px",background:`linear-gradient(135deg,${SK.bgCard},${SK.bgCard2})`,border:`1px solid ${SK.border}`,boxShadow:`0 4px 20px rgba(0,0,0,0.3),0 0 0 1px ${SK.pinkBorder}`,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <span style={{fontSize:11,padding:"2px 8px",borderRadius:12,background:`${cat.color}18`,color:cat.color,fontFamily:"'Noto Serif JP',serif"}}>{cat.label}</span>
@@ -483,7 +503,6 @@ function SakuraCard({card,onEdit,onDelete}) {
             </div>
           </div>
         </div>
-        {/* Back */}
         <div style={{position:"absolute",inset:0,backfaceVisibility:"hidden",transform:"rotateY(180deg)",borderRadius:16,padding:"20px",background:`linear-gradient(135deg,#1F0F20,#2A1030)`,border:`1px solid ${SK.pinkDeep}55`,boxShadow:`0 4px 20px rgba(236,72,153,0.15)`,display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",gap:12}}>
           <div style={{fontFamily:"'Noto Serif JP',serif",fontSize:22,color:SK.pink,textAlign:"center"}}>{card.japanese}</div>
           <div style={{width:40,height:1,background:`rgba(249,168,212,0.3)`}}/>
@@ -559,7 +578,6 @@ function PracticeMode({cards,onUpdateCard}) {
 
   return(
     <div style={{maxWidth:480,margin:"0 auto"}}>
-      {/* Progress */}
       <div style={{marginBottom:20}}>
         <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"rgba(249,168,212,0.5)",marginBottom:6}}>
           <span>{idx+1} / {queue.length}</span>
@@ -569,8 +587,6 @@ function PracticeMode({cards,onUpdateCard}) {
           <div style={{height:"100%",width:`${progress}%`,background:`linear-gradient(90deg,${SK.pinkDeep},${SK.pink})`,borderRadius:2,transition:"width 0.3s"}}/>
         </div>
       </div>
-
-      {/* Flashcard */}
       <div style={{perspective:"1000px",cursor:"pointer",height:240,marginBottom:20}} onClick={()=>setFlipped(f=>!f)}>
         <div style={{position:"relative",width:"100%",height:"100%",transformStyle:"preserve-3d",transition:"transform 0.5s ease",transform:flipped?"rotateY(180deg)":"rotateY(0)"}}>
           <div style={{position:"absolute",inset:0,backfaceVisibility:"hidden",borderRadius:20,padding:"28px",background:`linear-gradient(135deg,${SK.bgCard},${SK.bgCard2})`,border:`1px solid ${SK.border}`,display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",gap:12}}>
@@ -586,23 +602,19 @@ function PracticeMode({cards,onUpdateCard}) {
           </div>
         </div>
       </div>
-
-      {/* Answer buttons */}
       {flipped&&(
         <div style={{display:"flex",gap:12,animation:"fadeUp 0.2s ease"}}>
           <button onClick={()=>answer(false)}
-            style={{flex:1,padding:"14px",borderRadius:14,background:"rgba(248,113,113,0.1)",border:`1px solid ${T.red}44`,color:T.red,cursor:"pointer",fontFamily:"'Zen Kaku Gothic New',sans-serif",fontWeight:700,fontSize:15,transition:"all 0.2s"}}>
+            style={{flex:1,padding:"14px",borderRadius:14,background:"rgba(248,113,113,0.1)",border:`1px solid ${T.red}44`,color:T.red,cursor:"pointer",fontFamily:"'Zen Kaku Gothic New',sans-serif",fontWeight:700,fontSize:15}}>
             ❌ わからない
           </button>
           <button onClick={()=>answer(true)}
-            style={{flex:1,padding:"14px",borderRadius:14,background:"rgba(74,222,128,0.1)",border:`1px solid ${T.green}44`,color:T.green,cursor:"pointer",fontFamily:"'Zen Kaku Gothic New',sans-serif",fontWeight:700,fontSize:15,transition:"all 0.2s"}}>
+            style={{flex:1,padding:"14px",borderRadius:14,background:"rgba(74,222,128,0.1)",border:`1px solid ${T.green}44`,color:T.green,cursor:"pointer",fontFamily:"'Zen Kaku Gothic New',sans-serif",fontWeight:700,fontSize:15}}>
             ✅ わかった！
           </button>
         </div>
       )}
-      {!flipped&&(
-        <div style={{textAlign:"center",color:"rgba(249,168,212,0.3)",fontSize:13}}>Tap the card to reveal the answer 🌸</div>
-      )}
+      {!flipped&&<div style={{textAlign:"center",color:"rgba(249,168,212,0.3)",fontSize:13}}>Tap the card to reveal the answer 🌸</div>}
     </div>
   );
 }
@@ -625,13 +637,10 @@ function SakuraCardModal({initial,onSave,onClose}) {
           <span style={{fontFamily:"'Noto Serif JP',serif",fontSize:17,color:SK.pink}}>{initial?"カードを編集":"新しいカード · New Card"}</span>
           <button style={S.iconBtn} onClick={onClose}>{IC.close}</button>
         </div>
-
         <input ref={ref} style={{...inp,fontFamily:"'Noto Serif JP',serif",fontSize:22,textAlign:"center",color:SK.pink}} placeholder="日本語 (Japanese)" value={japanese} onChange={e=>setJapanese(e.target.value)}/>
         <input style={inp} placeholder="Romaji (pronunciation)" value={romaji} onChange={e=>setRomaji(e.target.value)}/>
         <input style={{...inp,color:T.textBright}} placeholder="English meaning" value={english} onChange={e=>setEnglish(e.target.value)}/>
-        <input style={{...inp,color:T.textDim,fontSize:13}} placeholder="Notes (optional — example sentence, memory tip...)" value={notes} onChange={e=>setNotes(e.target.value)}/>
-
-        {/* Category */}
+        <input style={{...inp,color:T.textDim,fontSize:13}} placeholder="Notes (optional)" value={notes} onChange={e=>setNotes(e.target.value)}/>
         <div style={{marginBottom:12}}>
           <div style={{fontSize:11,color:"rgba(249,168,212,0.4)",marginBottom:8,letterSpacing:1,textTransform:"uppercase"}}>Category</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -643,8 +652,6 @@ function SakuraCardModal({initial,onSave,onClose}) {
             ))}
           </div>
         </div>
-
-        {/* JLPT */}
         <div style={{marginBottom:20}}>
           <div style={{fontSize:11,color:"rgba(249,168,212,0.4)",marginBottom:8,letterSpacing:1,textTransform:"uppercase"}}>JLPT Level</div>
           <div style={{display:"flex",gap:6}}>
@@ -656,7 +663,6 @@ function SakuraCardModal({initial,onSave,onClose}) {
             ))}
           </div>
         </div>
-
         <div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
           <button style={{background:"transparent",border:`1px solid ${SK.border}`,borderRadius:10,padding:"9px 20px",cursor:"pointer",fontFamily:"'Zen Kaku Gothic New',sans-serif",fontSize:13.5,color:"rgba(249,168,212,0.4)"}} onClick={onClose}>Cancel</button>
           <button style={{border:"none",borderRadius:10,padding:"9px 22px",cursor:"pointer",fontFamily:"'Zen Kaku Gothic New',sans-serif",fontSize:13.5,fontWeight:700,background:`linear-gradient(135deg,${SK.pinkDeep},#BE185D)`,color:"white",opacity:!japanese.trim()||!english.trim()?0.4:1}}
@@ -845,7 +851,7 @@ function AddLotModal({onSave,onClose}) {
   );
 }
 
-// ── Hiroshi Chat (with Sakura Japanese mode) ──────────────────────────────────
+// ── Hiroshi Chat ──────────────────────────────────────────────────────────────
 const HIROSHI_GREETING={id:"0",role:"assistant",text:`やあ、Rudhra！ I'm Hiroshi 🌿\n\nI know everything in your lots. What's on your mind?\n\n— or pick a mode below to get started 👇`};
 const HIROSHI_SAKURA_GREETING={id:"0",role:"assistant",text:`いらっしゃいませ、Rudhra！🌸 (Welcome, Rudhra!)\n\nさくらの世界へようこそ！(Welcome to Sakura World!)\n\n日本語の練習を始めましょうか？(Shall we start practicing Japanese?)\n\n何を学びたいですか？(What would you like to learn?)`};
 
@@ -906,8 +912,6 @@ function HiroshiChat({ideas,lots,sakuraCards,isSakuraMode,onClose}) {
     <div style={{position:"fixed",inset:0,zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"flex-end",padding:"0 20px 20px",pointerEvents:"none"}}>
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(4px)",pointerEvents:"all",animation:"fadeIn 0.2s ease"}} onClick={onClose}/>
       <div style={{position:"relative",width:"100%",maxWidth:430,height:"78vh",background:bgCol,border:`1px solid ${borderCol}`,borderRadius:20,display:"flex",flexDirection:"column",boxShadow:isSakuraMode?`0 0 80px rgba(249,168,212,0.12),0 24px 60px rgba(0,0,0,0.6)`:`0 0 80px rgba(74,144,217,0.15),0 24px 60px rgba(0,0,0,0.6)`,animation:"slideUp 0.3s ease",pointerEvents:"all",overflow:"hidden"}}>
-
-        {/* Header */}
         <div style={{padding:"14px 16px",borderBottom:`1px solid ${isSakuraMode?SK.border:T.border}`,background:isSakuraMode?"rgba(249,168,212,0.04)":"rgba(74,144,217,0.04)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:isSakuraMode?8:10}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -931,8 +935,6 @@ function HiroshiChat({ideas,lots,sakuraCards,isSakuraMode,onClose}) {
               <button style={{background:"none",border:"none",cursor:"pointer",color:isSakuraMode?SK.pink:T.textDim,display:"flex",padding:6,borderRadius:8}} onClick={onClose}>{IC.close}</button>
             </div>
           </div>
-
-          {/* Controls — only for normal mode */}
           {!isSakuraMode&&(
             <div style={{display:"flex",gap:8}}>
               <div style={{display:"flex",background:T.bgCard,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden",flex:1}}>
@@ -947,15 +949,12 @@ function HiroshiChat({ideas,lots,sakuraCards,isSakuraMode,onClose}) {
               </div>
             </div>
           )}
-
           {isSakuraMode&&(
             <div style={{fontSize:11,color:SK.pink,opacity:0.5,background:"rgba(249,168,212,0.05)",border:`1px solid ${SK.pinkBorder}`,borderRadius:6,padding:"5px 10px",textAlign:"center"}}>
               🌸 日本語モードでお話しましょう · Let's speak in Japanese
             </div>
           )}
         </div>
-
-        {/* Messages */}
         <div style={{flex:1,overflowY:"auto",padding:"14px 14px 6px",display:"flex",flexDirection:"column",gap:10}}>
           {messages.map(msg=>(
             <div key={msg.id} style={{display:"flex",justifyContent:msg.role==="user"?"flex-end":"flex-start",animation:"fadeUp 0.2s ease"}}>
@@ -984,8 +983,6 @@ function HiroshiChat({ideas,lots,sakuraCards,isSakuraMode,onClose}) {
           )}
           <div ref={bottomRef}/>
         </div>
-
-        {/* Quick suggestions */}
         {messages.length===1&&(
           <div style={{padding:"4px 12px 8px",display:"flex",flexWrap:"wrap",gap:5}}>
             {QUICK.map(s=>(
@@ -996,12 +993,10 @@ function HiroshiChat({ideas,lots,sakuraCards,isSakuraMode,onClose}) {
             ))}
           </div>
         )}
-
-        {/* Input */}
         <div style={{padding:"10px 12px",borderTop:`1px solid ${isSakuraMode?SK.border:T.border}`,display:"flex",gap:8,alignItems:"flex-end"}}>
           <textarea ref={inputRef} value={input} onChange={e=>setInput(e.target.value)}
             onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
-            placeholder={isSakuraMode?"日本語で話しましょう... (Let's talk in Japanese...)":"Ask Hiroshi anything..."}
+            placeholder={isSakuraMode?"日本語で話しましょう...":"Ask Hiroshi anything..."}
             rows={1} style={{flex:1,background:isSakuraMode?SK.bgCard:T.bgCard,border:`1px solid ${isSakuraMode?SK.border:T.border}`,borderRadius:10,padding:"9px 12px",fontSize:13,color:isSakuraMode?SK.pink:T.text,fontFamily:"'Zen Kaku Gothic New',sans-serif",outline:"none",resize:"none",lineHeight:1.5,maxHeight:90,overflowY:"auto"}}/>
           <button onClick={()=>send()} disabled={!input.trim()||loading}
             style={{width:36,height:36,borderRadius:"50%",background:input.trim()&&!loading?isSakuraMode?SK.pinkDeep:T.accent:"#1E2D45",border:"none",cursor:input.trim()&&!loading?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"background 0.2s",marginBottom:1}}>
