@@ -50,6 +50,16 @@ const DEFAULT_LOTS = [
   {id:"sakura",     name:"Sakura World",     emoji:"🌸", accent:"#F9A8D4", glow:"rgba(249,168,212,0.15)", special:"sakura"},
 ];
 
+// ── API headers helper ────────────────────────────────────────────────────────
+function apiHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
+    "anthropic-version": "2023-06-01",
+    "anthropic-dangerous-direct-browser-access": "true",
+  };
+}
+
 // ── Storage ───────────────────────────────────────────────────────────────────
 async function loadData() {
   try {
@@ -58,7 +68,6 @@ async function loadData() {
     if (!lotsData || lotsData.length === 0) return null;
     const ideas = {};
     ideasData?.forEach(i => {
-      // normalize created_at -> createdAt for compatibility
       const idea = { ...i, createdAt: i.createdAt || i.created_at };
       if (!ideas[i.lot_id]) ideas[i.lot_id] = [];
       ideas[i.lot_id].push(idea);
@@ -94,7 +103,7 @@ function isOld(ts) { return (Date.now()-ts)>30*24*60*60*1000; }
 async function runPython(code) {
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method:"POST", headers:{"Content-Type":"application/json"},
+      method:"POST", headers: apiHeaders(),
       body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,
         system:"You are a Python interpreter. Return ONLY terminal output. No explanations, no markdown. If error, return exact Python error. If no output: (no output)",
         messages:[{role:"user",content:`Run this:\n\n${code}`}]})
@@ -132,7 +141,7 @@ ${personalityGuide} ${brainstormGuide}
 - Sign off with 🌿 sometimes
 Parked ideas:\n${context||"Nothing yet!"}\nToday: ${new Date().toDateString()}`;
   const res=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",headers:{"Content-Type":"application/json"},
+    method:"POST", headers: apiHeaders(),
     body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,
       messages:messages.filter(m=>m.id!=="0").map(m=>({role:m.role,content:m.text}))})
   });
@@ -160,7 +169,7 @@ ${cardContext||"まだカードがありません。一緒に始めましょう�
 Format: Always write Japanese first, then (English translation) in parentheses.
 Example: こんにちは、Rudhra！(Hello, Rudhra!) 今日は何を勉強しますか？(What will you study today?)`;
   const res=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",headers:{"Content-Type":"application/json"},
+    method:"POST", headers: apiHeaders(),
     body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,
       messages:messages.filter(m=>m.id!=="0").map(m=>({role:m.role,content:m.text}))})
   });
@@ -276,7 +285,6 @@ export default function Hiroba() {
 
   return(
     <div style={{...S.root, background: isSakura?SK.bg:T.bg}}>
-      {/* Stars / Petals */}
       <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}} aria-hidden>
         {[...Array(isSakura?32:24)].map((_,i)=>(
           <div key={i} style={{position:"absolute",
@@ -292,7 +300,6 @@ export default function Hiroba() {
         ))}
       </div>
 
-      {/* Header */}
       <header style={{...S.header, borderBottomColor: isSakura?SK.border:T.border, background: isSakura?"rgba(15,10,15,0.92)":"rgba(11,15,26,0.9)"}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           {activeLot&&<button style={S.iconBtn} onClick={()=>{setActiveLot(null);setSakuraView("cards");}}>{IC.back}</button>}
@@ -319,7 +326,6 @@ export default function Hiroba() {
         </div>
       </header>
 
-      {/* Search */}
       {search.trim()&&(
         <div style={S.main}>
           <div style={{fontSize:12,color:T.textDim,marginBottom:20,letterSpacing:1,textTransform:"uppercase"}}>{searchResults.length} result{searchResults.length!==1?"s":""} for "{search}"</div>
@@ -332,7 +338,6 @@ export default function Hiroba() {
         </div>
       )}
 
-      {/* Home */}
       {!search.trim()&&!activeLot&&(
         <main style={S.main}>
           <div style={{display:"flex",alignItems:"baseline",gap:16,marginBottom:28}}>
@@ -354,7 +359,6 @@ export default function Hiroba() {
         </main>
       )}
 
-      {/* Sakura World */}
       {!search.trim()&&isSakura&&(
         <SakuraWorld
           cards={sakuraCards} view={sakuraView} setView={setSakuraView}
@@ -367,7 +371,6 @@ export default function Hiroba() {
         />
       )}
 
-      {/* Regular Lot View */}
       {!search.trim()&&activeLot&&!isSakura&&currentLot&&(
         <main style={S.main}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24,flexWrap:"wrap",gap:12}}>
@@ -403,7 +406,6 @@ export default function Hiroba() {
       {showAddCard&&<SakuraCardModal onSave={d=>{addCard(d);setShowAddCard(false);}} onClose={()=>setShowAddCard(false)}/>}
       {editingCard&&<SakuraCardModal initial={editingCard} onSave={d=>{updateCard(editingCard.id,d);setEditingCard(null);}} onClose={()=>setEditingCard(null)}/>}
 
-      {/* Hiroshi FAB */}
       {!showHiroshi&&(
         <button onClick={()=>setShowHiroshi(true)}
           style={{position:"fixed",bottom:28,right:28,width:58,height:58,borderRadius:"50%",
@@ -420,7 +422,6 @@ export default function Hiroba() {
   );
 }
 
-// ── Sakura World ──────────────────────────────────────────────────────────────
 function SakuraWorld({cards,view,setView,filterCat,setFilterCat,onAddCard,onEditCard,onDeleteCard,onUpdateCard,onOpenHiroshi}) {
   const filtered = filterCat==="all"?cards:cards.filter(c=>c.category===filterCat);
   return(
@@ -479,7 +480,6 @@ function SakuraWorld({cards,view,setView,filterCat,setFilterCat,onAddCard,onEdit
   );
 }
 
-// ── Sakura Card ───────────────────────────────────────────────────────────────
 function SakuraCard({card,onEdit,onDelete}) {
   const [flipped,setFlipped] = useState(false);
   const cat = JP_CATS.find(c=>c.id===card.category)||JP_CATS[0];
@@ -518,7 +518,6 @@ function SakuraCard({card,onEdit,onDelete}) {
   );
 }
 
-// ── Practice Mode ─────────────────────────────────────────────────────────────
 function PracticeMode({cards,onUpdateCard}) {
   const [queue,setQueue]     = useState(()=>[...cards].sort(()=>Math.random()-0.5));
   const [idx,setIdx]         = useState(0);
@@ -619,7 +618,6 @@ function PracticeMode({cards,onUpdateCard}) {
   );
 }
 
-// ── Sakura Card Modal ─────────────────────────────────────────────────────────
 function SakuraCardModal({initial,onSave,onClose}) {
   const [japanese,setJapanese] = useState(initial?.japanese||"");
   const [romaji,setRomaji]     = useState(initial?.romaji||"");
@@ -675,7 +673,6 @@ function SakuraCardModal({initial,onSave,onClose}) {
   );
 }
 
-// ── Empty State ───────────────────────────────────────────────────────────────
 function EmptyState({emoji,text,sub}) {
   return(
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",paddingTop:80,gap:10}}>
@@ -686,7 +683,6 @@ function EmptyState({emoji,text,sub}) {
   );
 }
 
-// ── Lot Card ──────────────────────────────────────────────────────────────────
 function LotCard({lot,count,index,onClick,onDelete,isDefault,oldCount}) {
   const [hov,setHov]=useState(false);
   const isSakura=lot.id==="sakura";
@@ -700,13 +696,12 @@ function LotCard({lot,count,index,onClick,onDelete,isDefault,oldCount}) {
       <div style={{fontSize:30,marginBottom:12,animation:isSakura&&hov?"petalFall 1s ease-in-out infinite":"none"}}>{lot.emoji}</div>
       <div style={{fontWeight:700,fontSize:14,color:isSakura?SK.pink:T.textBright,marginBottom:6,lineHeight:1.3}}>{lot.name}</div>
       {isSakura&&<div style={{fontSize:10,color:SK.pink,opacity:0.4,marginBottom:4,fontFamily:"'Noto Serif JP',serif"}}>さくらの世界</div>}
-      <div style={{fontSize:12,color:lot.accent,opacity:0.85}}>{count} {isSakura?"cards":"idea"}{count!==1?"s":""}</div>
+      <div style={{fontSize:12,color:lot.accent,opacity:0.85}}>{count} {isSakura?"card":"idea"}{count!==1?"s":""}</div>
       <div style={{position:"absolute",bottom:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${lot.accent}00,${lot.accent},${lot.accent}00)`,opacity:hov?1:0.35,transition:"opacity 0.3s"}}/>
     </div>
   );
 }
 
-// ── Idea Card ─────────────────────────────────────────────────────────────────
 function IdeaCard({idea,isCode,accent,onDelete,onEdit,onCopy,copied,onRun,output,onClearOutput,isRunning,showLot}) {
   const [hov,setHov]=useState(false);
   const col=accent||idea.lotAccent||T.accent;
@@ -764,7 +759,6 @@ function IdeaCard({idea,isCode,accent,onDelete,onEdit,onCopy,copied,onRun,output
   );
 }
 
-// ── Idea Modal ────────────────────────────────────────────────────────────────
 function IdeaModal({lot,initial,onSave,onClose}) {
   const [title,setTitle]=useState(initial?.title||"");
   const [body,setBody]=useState(initial?.body||"");
@@ -823,7 +817,6 @@ function IdeaModal({lot,initial,onSave,onClose}) {
   );
 }
 
-// ── Add Lot Modal ─────────────────────────────────────────────────────────────
 const EMOJIS=["🚀","🌸","🎯","🔥","💎","🧠","🌍","🎨","📚","🎵","🏋️","🌙","⚽","🤝","🔬","📱","💡","🗺️","🎭","🌊","🦋","🧩","🎪","🌺"];
 function AddLotModal({onSave,onClose}) {
   const [name,setName]=useState(""); const [emoji,setEmoji]=useState("💡");
@@ -851,7 +844,6 @@ function AddLotModal({onSave,onClose}) {
   );
 }
 
-// ── Hiroshi Chat ──────────────────────────────────────────────────────────────
 const HIROSHI_GREETING={id:"0",role:"assistant",text:`やあ、Rudhra！ I'm Hiroshi 🌿\n\nI know everything in your lots. What's on your mind?\n\n— or pick a mode below to get started 👇`};
 const HIROSHI_SAKURA_GREETING={id:"0",role:"assistant",text:`いらっしゃいませ、Rudhra！🌸 (Welcome, Rudhra!)\n\nさくらの世界へようこそ！(Welcome to Sakura World!)\n\n日本語の練習を始めましょうか？(Shall we start practicing Japanese?)\n\n何を学びたいですか？(What would you like to learn?)`};
 
@@ -1008,7 +1000,6 @@ function HiroshiChat({ideas,lots,sakuraCards,isSakuraMode,onClose}) {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const S={
   root:{minHeight:"100vh",fontFamily:"'Zen Kaku Gothic New',sans-serif",backgroundImage:`radial-gradient(ellipse at 15% 40%,rgba(74,144,217,0.07) 0%,transparent 55%),radial-gradient(ellipse at 85% 10%,rgba(192,132,252,0.05) 0%,transparent 50%)`,position:"relative",overflowX:"hidden",transition:"background 0.5s"},
   header:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 28px",borderBottom:"1px solid",background:"rgba(11,15,26,0.9)",backdropFilter:"blur(16px)",position:"sticky",top:0,zIndex:100,transition:"all 0.3s"},
