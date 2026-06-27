@@ -50,16 +50,6 @@ const DEFAULT_LOTS = [
   {id:"sakura",     name:"Sakura World",     emoji:"🌸", accent:"#F9A8D4", glow:"rgba(249,168,212,0.15)", special:"sakura"},
 ];
 
-// ── API headers helper ────────────────────────────────────────────────────────
-function apiHeaders() {
-  return {
-    "Content-Type": "application/json",
-    "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-    "anthropic-version": "2023-06-01",
-    "anthropic-dangerous-direct-browser-access": "true",
-  };
-}
-
 // ── Storage ───────────────────────────────────────────────────────────────────
 async function loadData() {
   try {
@@ -99,20 +89,79 @@ function timeAgo(ts) {
 }
 function isOld(ts) { return (Date.now()-ts)>30*24*60*60*1000; }
 
-// ── API helpers ───────────────────────────────────────────────────────────────
+// ── PYODIDE — real Python in the browser, 100% free, no API key ──────────────
+let pyodideInstance = null;
+let pyodideLoadingPromise = null;
+
+function loadPyodide() {
+  if (pyodideInstance) return Promise.resolve(pyodideInstance);
+  if (pyodideLoadingPromise) return pyodideLoadingPromise;
+
+  pyodideLoadingPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js";
+    script.onload = async () => {
+      try {
+        const py = await window.loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.1/full/" });
+        pyodideInstance = py;
+        resolve(py);
+      } catch (e) { reject(e); }
+    };
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return pyodideLoadingPromise;
+}
+
 async function runPython(code) {
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method:"POST", headers: apiHeaders(),
-      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,
-        system:"You are a Python interpreter. Return ONLY terminal output. No explanations, no markdown. If error, return exact Python error. If no output: (no output)",
-        messages:[{role:"user",content:`Run this:\n\n${code}`}]})
-    });
-    const data=await res.json();
-    if(data.error) return {text:data.error.message,error:true};
-    const text=data.content?.[0]?.text||"(no output)";
-    return {text,error:text.includes("Traceback")||text.includes("Error:")};
-  } catch(e){return {text:`Failed: ${e.message}`,error:true};}
+    const py = await loadPyodide();
+    await py.runPythonAsync(`
+import sys, io
+sys.stdout = io.StringIO()
+sys.stderr = sys.stdout
+`);
+    try {
+      await py.runPythonAsync(code);
+      const out = await py.runPythonAsync(`sys.stdout.getvalue()`);
+      return { text: out || "(no output)", error: false };
+    } catch (e) {
+      return { text: e.message || String(e), error: true };
+    } finally {
+      await py.runPythonAsync(`sys.stdout = sys.__stdout__; sys.stderr = sys.__stderr__`);
+    }
+  } catch (e) {
+    return { text: `Failed to load Python runtime: ${e.message}`, error: true };
+  }
+}
+
+// ── GEMINI API — free tier, powers Hiroshi ────────────────────────────────────
+async function callGemini(systemPrompt, messages) {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Gemini API key is missing. Check your .env file.");
+
+  // Gemini doesn't have a separate "system" role like Anthropic —
+  // we prepend it as the first user turn, then a model ack, then real history.
+  const contents = [
+    { role: "user", parts: [{ text: systemPrompt }] },
+    { role: "model", parts: [{ text: "Understood, I'm ready." }] },
+    ...messages.map(m => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.text }]
+    }))
+  ];
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents })
+    }
+  );
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "...";
 }
 
 async function askHiroshi(messages,allIdeas,allLots,personality,mode) {
@@ -140,14 +189,9 @@ ${personalityGuide} ${brainstormGuide}
 - Honest, concise, conversational
 - Sign off with 🌿 sometimes
 Parked ideas:\n${context||"Nothing yet!"}\nToday: ${new Date().toDateString()}`;
-  const res=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST", headers: apiHeaders(),
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,
-      messages:messages.filter(m=>m.id!=="0").map(m=>({role:m.role,content:m.text}))})
-  });
-  const data=await res.json();
-  if(data.error) throw new Error(data.error.message);
-  return data.content?.[0]?.text||"...";
+
+  const history = messages.filter(m=>m.id!=="0");
+  return await callGemini(system, history);
 }
 
 async function askHiroshiJapanese(messages, cards) {
@@ -168,14 +212,9 @@ ${cardContext||"まだカードがありません。一緒に始めましょう�
 
 Format: Always write Japanese first, then (English translation) in parentheses.
 Example: こんにちは、Rudhra！(Hello, Rudhra!) 今日は何を勉強しますか？(What will you study today?)`;
-  const res=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST", headers: apiHeaders(),
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,
-      messages:messages.filter(m=>m.id!=="0").map(m=>({role:m.role,content:m.text}))})
-  });
-  const data=await res.json();
-  if(data.error) throw new Error(data.error.message);
-  return data.content?.[0]?.text||"...";
+
+  const history = messages.filter(m=>m.id!=="0");
+  return await callGemini(system, history);
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -268,7 +307,7 @@ export default function Hiroba() {
   async function handleRun(idea){
     if(runningId) return;
     setRunningId(idea.id);
-    setOutputs(p=>({...p,[idea.id]:{text:"⏳ Running Python...",error:false,running:true}}));
+    setOutputs(p=>({...p,[idea.id]:{text:"⏳ Loading Python runtime (first run takes ~10s)...",error:false,running:true}}));
     const result=await runPython(idea.body);
     setOutputs(p=>({...p,[idea.id]:{...result,running:false}}));
     setRunningId(null);
@@ -887,7 +926,7 @@ function HiroshiChat({ideas,lots,sakuraCards,isSakuraMode,onClose}) {
         :await askHiroshi(history,ideas,lots,personality,mode);
       setMessages(p=>[...p,{id:Date.now().toString(),role:"assistant",text:reply}]);
     } catch(e) {
-      setMessages(p=>[...p,{id:Date.now().toString(),role:"assistant",text:`Sumimasen... something went wrong 😓`}]);
+      setMessages(p=>[...p,{id:Date.now().toString(),role:"assistant",text:`Sumimasen... something went wrong 😓 (${e.message})`}]);
     }
     setLoading(false);
   }
