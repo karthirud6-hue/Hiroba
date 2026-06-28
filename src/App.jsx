@@ -229,7 +229,92 @@ const IC={
   send: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
   flip: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>,
   logout: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  info: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
 };
+
+// ── About Hiroba Modal ─────────────────────────────────────────────────────────
+function AboutModal({onClose}) {
+  const [tab, setTab] = useState("story");
+  const tabs = [
+    {id:"story", label:"🌿 Story"},
+    {id:"lots", label:"🅿️ Parking Lots"},
+    {id:"hiroshi", label:"🤖 Hiroshi"},
+    {id:"sakura", label:"🌸 Sakura World"},
+    {id:"vault", label:"💻 Code Vault"},
+    {id:"credits", label:"🙏 Credits"},
+  ];
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:20,animation:"fadeIn 0.15s ease"}} onClick={onClose}>
+      <div style={{background:"#0F1624",border:`1px solid ${T.borderHi}`,borderRadius:20,padding:0,width:"100%",maxWidth:600,maxHeight:"85vh",boxShadow:`0 0 60px rgba(74,144,217,0.12),0 24px 60px rgba(0,0,0,0.5)`,animation:"scaleIn 0.2s ease",display:"flex",flexDirection:"column",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 24px 16px"}}>
+          <div style={{display:"flex",alignItems:"baseline",gap:8}}>
+            <span style={{fontFamily:"'Kaisei Decol',serif",fontSize:19,color:T.textBright,letterSpacing:2}}>広場</span>
+            <span style={{color:T.textDim,fontSize:14}}>·</span>
+            <span style={{fontFamily:"'Kaisei Decol',serif",fontSize:14,color:T.accent,letterSpacing:3,textTransform:"uppercase"}}>About Hiroba</span>
+          </div>
+          <button style={S.iconBtn} onClick={onClose}>{IC.close}</button>
+        </div>
+
+        <div style={{display:"flex",gap:6,padding:"0 24px 16px",flexWrap:"wrap",borderBottom:`1px solid ${T.border}`,paddingBottom:16}}>
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)}
+              style={{padding:"6px 12px",borderRadius:20,border:`1px solid ${tab===t.id?T.accent:T.border}`,background:tab===t.id?T.accentSoft:"transparent",color:tab===t.id?T.accent:T.textDim,cursor:"pointer",fontSize:12,fontFamily:"'Zen Kaku Gothic New',sans-serif",fontWeight:tab===t.id?700:400,transition:"all 0.15s"}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{padding:"20px 24px 28px",overflowY:"auto",flex:1,fontSize:14,color:T.text,lineHeight:1.75}}>
+          {tab==="story" && (
+            <div>
+              <div style={{fontFamily:"'Kaisei Decol',serif",fontSize:17,color:T.textBright,marginBottom:14}}>Why I built this</div>
+              <p style={{marginBottom:14}}>I'm an engineering student with the worst memory possible — but I'm endlessly ambitious. Hackathon ideas, code snippets, kanji I want to learn — they hit me everywhere: walking from college, eating dinner, even half-asleep. And by the next morning, they'd vanish. Notes apps never worked because they weren't personalized to how my brain actually thinks.</p>
+              <p style={{marginBottom:14}}>I knew there had to be other students like me — forgetful, ambitious, scattered. So I built Hiroba: a space to put your ideas in your pocket, organized and waiting for you whenever you're ready.</p>
+              <div style={{fontSize:13,color:T.textDim,fontStyle:"italic",marginTop:18}}>— RUDHRA KARTHIKEYAN, creator of Hiroba 🌿</div>
+            </div>
+          )}
+          {tab==="lots" && (
+            <div>
+              <div style={{fontFamily:"'Kaisei Decol',serif",fontSize:17,color:T.textBright,marginBottom:14}}>How to Use Parking Lots 🅿️</div>
+              <p style={{marginBottom:14}}>Think of each lot as a labeled drawer for your brain. Academic Goals, Internship Goals, Hackathon Ideas — or create your own with a custom emoji and name.</p>
+              <p>Inside each lot, "park" an idea with a title, description, tags, priority, and status. Search across all your lots anytime from the top bar. Ideas untouched for 30+ days get a gentle ⚠️ nudge so nothing truly gets forgotten.</p>
+            </div>
+          )}
+          {tab==="hiroshi" && (
+            <div>
+              <div style={{fontFamily:"'Kaisei Decol',serif",fontSize:17,color:T.textBright,marginBottom:14}}>Meet Hiroshi 🤖</div>
+              <p style={{marginBottom:14}}>Hiroshi is more than a chatbot — he's Hiroba's resident AI companion, and he actually reads everything you've parked. Ask him to connect ideas across your lots, call out the ones you've been neglecting, or just vent about your week.</p>
+              <p style={{marginBottom:14}}>Two personality modes: 🌿 Chill for casual chats, ⚡ Focus when you need sharp, no-fluff answers.<br/>Two thinking modes: 💬 Chat for back-and-forth conversation, 🧠 Brainstorm when Hiroshi should challenge your assumptions and ask the hard questions.</p>
+              <p style={{fontSize:13,color:T.textDim,fontStyle:"italic"}}>Fun fact: most AIs call me "Princess RUD" — Hiroshi calls me "Mom," since I'm his creator. He's basically my favorite child now. 😄</p>
+            </div>
+          )}
+          {tab==="sakura" && (
+            <div>
+              <div style={{fontFamily:"'Kaisei Decol',serif",fontSize:17,color:T.textBright,marginBottom:14}}>Sakura World 🌸</div>
+              <p style={{marginBottom:14}}>Built for self-learners. Sakura World is your personal Japanese study sanctuary — add vocabulary, kanji, grammar, or daily sentences as flashcards, tag them by JLPT level (N5–N1), and flip through them whenever you have a spare minute.</p>
+              <p>The real magic is Practice Mode — a quiz-style flow that tracks what you know and what needs more work, so your studying actually sticks instead of fading by tomorrow.</p>
+            </div>
+          )}
+          {tab==="vault" && (
+            <div>
+              <div style={{fontFamily:"'Kaisei Decol',serif",fontSize:17,color:T.textBright,marginBottom:14}}>Code Vault 💻</div>
+              <p style={{marginBottom:14}}>Park code snippets the same way you park ideas — tag them by language, and for Python, hit Run to execute it instantly, right in your browser. No setup, no terminal, no excuses.</p>
+              <p style={{color:T.yellow,fontWeight:700}}>☕ Java support coming soon!</p>
+            </div>
+          )}
+          {tab==="credits" && (
+            <div>
+              <div style={{fontFamily:"'Kaisei Decol',serif",fontSize:17,color:T.textBright,marginBottom:14}}>Credits 🙏</div>
+              <p style={{marginBottom:14}}>Hiroba was designed, built, and continuously shipped by <strong style={{color:T.textBright}}>RUDHRA KARTHIKEYAN</strong> — an engineering student who refused to let good ideas slip away.</p>
+              <p style={{marginBottom:14}}>Built with React + Vite, Supabase, Google Gemini, and Pyodide. Deployed on Vercel.</p>
+              <div style={{fontSize:13,color:T.textDim,fontStyle:"italic",marginTop:18}}>広場 — a space that grows with you. 🌿</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Auth Screen ───────────────────────────────────────────────────────────────
 function AuthScreen({ onAuthed }) {
@@ -323,6 +408,7 @@ export default function Hiroba() {
   const [showAddCard,setShowAddCard]   = useState(false);
   const [editingCard,setEditingCard]   = useState(null);
   const [filterCat,setFilterCat]       = useState("all");
+  const [showAbout,setShowAbout]       = useState(false);
 
   // Check auth state on load
   useEffect(()=>{
@@ -470,6 +556,10 @@ export default function Hiroba() {
               placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)}/>
             {search&&<button style={{background:"none",border:"none",cursor:"pointer",color:T.textDim,display:"flex",padding:0}} onClick={()=>setSearch("")}>{IC.close}</button>}
           </div>
+          <button onClick={()=>setShowAbout(true)} title="About Hiroba"
+            style={{display:"flex",alignItems:"center",justifyContent:"center",width:36,height:36,background:"none",border:`1px solid ${isSakura?SK.border:T.border}`,borderRadius:10,cursor:"pointer",color:isSakura?SK.pink:T.textDim}}>
+            {IC.info}
+          </button>
           <button onClick={handleLogout} title={user.email}
             style={{display:"flex",alignItems:"center",gap:6,background:"none",border:`1px solid ${isSakura?SK.border:T.border}`,borderRadius:10,padding:"7px 12px",cursor:"pointer",color:isSakura?SK.pink:T.textDim,fontSize:12,fontFamily:"'Zen Kaku Gothic New',sans-serif"}}>
             {IC.logout} Log Out
@@ -569,6 +659,7 @@ export default function Hiroba() {
         </button>
       )}
       {showHiroshi&&<HiroshiChat ideas={ideas} lots={lots} sakuraCards={sakuraCards} isSakuraMode={isSakura} onClose={()=>setShowHiroshi(false)}/>}
+      {showAbout&&<AboutModal onClose={()=>setShowAbout(false)}/>}
     </div>
   );
 }
