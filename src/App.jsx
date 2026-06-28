@@ -430,12 +430,13 @@ export default function Hiroba() {
   return(
     <div style={{...S.root, background: isSakura?SK.bg:T.bg}}>
       <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}} aria-hidden>
-        {[...Array(isSakura?32:24)].map((_,i)=>(
+        {[...Array(isSakura?32:28)].map((_,i)=>(
           <div key={i} style={{position:"absolute",
-            width:isSakura?(i%3===0?8:6):(i%4===0?2:1.5),
-            height:isSakura?(i%3===0?8:6):(i%4===0?2:1.5),
+            width:isSakura?(i%3===0?8:6):(i%4===0?5:3.5),
+            height:isSakura?(i%3===0?8:6):(i%4===0?5:3.5),
             borderRadius:isSakura?"30% 70% 70% 30% / 30% 30% 70% 70%":"50%",
-            background:isSakura?`rgba(249,168,212,${0.15+(i%4)*0.08})`:`rgba(123,167,212,${0.12+(i%5)*0.07})`,
+            background:isSakura?`rgba(249,168,212,${0.15+(i%4)*0.08})`:`rgba(150,190,255,${0.55+(i%5)*0.09})`,
+            boxShadow:isSakura?"none":`0 0 ${i%4===0?14:9}px ${i%4===0?6:3}px rgba(120,170,255,0.55)`,
             top:`${(i*41+13)%100}%`,left:`${(i*57+9)%100}%`,
             animation:isSakura?`petalFall ${4+(i%4)}s ease-in-out infinite`:`twinkle ${2+(i%3)}s ease-in-out infinite`,
             animationDelay:`${(i*0.4)%4}s`,
