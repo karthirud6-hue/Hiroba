@@ -241,7 +241,7 @@ function AboutModal({onClose}) {
     {id:"hiroshi", label:"🤖 Hiroshi"},
     {id:"sakura", label:"🌸 Sakura World"},
     {id:"vault", label:"💻 Code Vault"},
-    {id:"credits", label:"🙏 Credits"},
+    {id:"credits", label:"Credits"},
   ];
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:20,animation:"fadeIn 0.15s ease"}} onClick={onClose}>
@@ -304,7 +304,7 @@ function AboutModal({onClose}) {
           )}
           {tab==="credits" && (
             <div>
-              <div style={{fontFamily:"'Kaisei Decol',serif",fontSize:17,color:T.textBright,marginBottom:14}}>Credits 🙏</div>
+              <div style={{fontFamily:"'Kaisei Decol',serif",fontSize:17,color:T.textBright,marginBottom:14}}>Credits</div>
               <p style={{marginBottom:14}}>Hiroba was designed, built, and continuously shipped by <strong style={{color:T.textBright}}>RUDHRA KARTHIKEYAN</strong> — an engineering student who refused to let good ideas slip away.</p>
               <p style={{marginBottom:14}}>Built with React + Vite, Supabase, Google Gemini, and Pyodide. Deployed on Vercel.</p>
               <div style={{fontSize:13,color:T.textDim,fontStyle:"italic",marginTop:18}}>広場 — a space that grows with you. 🌿</div>
