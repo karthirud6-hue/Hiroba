@@ -51,10 +51,10 @@ const DEFAULT_LOTS = [
 ];
 
 // ── Storage ───────────────────────────────────────────────────────────────────
-async function loadData() {
+async function loadData(userId) {
   try {
-    const { data: lotsData } = await supabase.from('lots').select('*');
-    const { data: ideasData } = await supabase.from('ideas').select('*');
+    const { data: lotsData } = await supabase.from('lots').select('*').eq('user_id', userId);
+    const { data: ideasData } = await supabase.from('ideas').select('*').eq('user_id', userId);
     if (!lotsData || lotsData.length === 0) return null;
     const ideas = {};
     ideasData?.forEach(i => {
@@ -66,8 +66,9 @@ async function loadData() {
   } catch { return null; }
 }
 
-async function seedDefaultLots() {
-  await supabase.from('lots').insert(DEFAULT_LOTS);
+async function seedDefaultLots(userId) {
+  const lotsWithUser = DEFAULT_LOTS.map(l => ({ ...l, user_id: userId }));
+  await supabase.from('lots').insert(lotsWithUser);
 }
 
 async function loadSakura() {
@@ -140,8 +141,6 @@ async function callGemini(systemPrompt, messages) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) throw new Error("Gemini API key is missing. Check your .env file.");
 
-  // Gemini doesn't have a separate "system" role like Anthropic —
-  // we prepend it as the first user turn, then a model ack, then real history.
   const contents = [
     { role: "user", parts: [{ text: systemPrompt }] },
     { role: "model", parts: [{ text: "Understood, I'm ready." }] },
@@ -229,10 +228,84 @@ const IC={
   run:  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>,
   send: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
   flip: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>,
+  logout: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
 };
+
+// ── Auth Screen ───────────────────────────────────────────────────────────────
+function AuthScreen({ onAuthed }) {
+  const [mode, setMode] = useState("login"); // login | signup
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [info, setInfo] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(""); setInfo(""); setLoading(true);
+    try {
+      if (mode === "signup") {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        if (data.user && !data.session) {
+          setInfo("Check your email to confirm your account, then log in.");
+        } else if (data.session) {
+          onAuthed(data.session.user);
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        onAuthed(data.user);
+      }
+    } catch (err) {
+      setError(err.message || "Something went wrong");
+    }
+    setLoading(false);
+  }
+
+  const inp = {width:"100%",border:`1px solid ${T.border}`,background:T.bgCard,borderRadius:10,padding:"12px 14px",fontSize:14,fontFamily:"'Zen Kaku Gothic New',sans-serif",outline:"none",marginBottom:14,boxSizing:"border-box",color:T.text};
+
+  return (
+    <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Zen Kaku Gothic New',sans-serif",padding:20,backgroundImage:`radial-gradient(ellipse at 15% 40%,rgba(74,144,217,0.07) 0%,transparent 55%),radial-gradient(ellipse at 85% 10%,rgba(192,132,252,0.05) 0%,transparent 50%)`}}>
+      <div style={{width:"100%",maxWidth:380,background:"#0F1624",border:`1px solid ${T.borderHi}`,borderRadius:18,padding:32,boxShadow:`0 0 60px rgba(74,144,217,0.1),0 24px 60px rgba(0,0,0,0.5)`}}>
+        <div style={{textAlign:"center",marginBottom:28}}>
+          <div style={{display:"flex",alignItems:"baseline",justifyContent:"center",gap:8,marginBottom:6}}>
+            <span style={{fontFamily:"'Kaisei Decol',serif",fontSize:24,color:T.textBright,letterSpacing:3}}>広場</span>
+            <span style={{color:T.textDim}}>·</span>
+            <span style={{fontFamily:"'Kaisei Decol',serif",fontSize:15,color:T.accent,letterSpacing:4,textTransform:"uppercase"}}>Hiroba</span>
+          </div>
+          <div style={{fontSize:12,color:T.textDim}}>{mode==="login" ? "Welcome back" : "Create your account"}</div>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <input style={inp} type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/>
+          <input style={inp} type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} required minLength={6}/>
+
+          {error && <div style={{fontSize:12.5,color:T.red,background:"rgba(248,113,113,0.1)",border:`1px solid ${T.red}33`,borderRadius:8,padding:"8px 12px",marginBottom:14}}>{error}</div>}
+          {info && <div style={{fontSize:12.5,color:T.green,background:"rgba(74,222,128,0.1)",border:`1px solid ${T.green}33`,borderRadius:8,padding:"8px 12px",marginBottom:14}}>{info}</div>}
+
+          <button type="submit" disabled={loading}
+            style={{width:"100%",border:"none",borderRadius:10,padding:"12px",cursor:loading?"default":"pointer",fontFamily:"'Zen Kaku Gothic New',sans-serif",fontSize:14,fontWeight:700,background:T.accentSoft,color:T.accent,opacity:loading?0.6:1,marginBottom:16}}>
+            {loading ? "..." : mode==="login" ? "Log In" : "Sign Up"}
+          </button>
+        </form>
+
+        <div style={{textAlign:"center",fontSize:13,color:T.textDim}}>
+          {mode==="login" ? "Don't have an account? " : "Already have an account? "}
+          <button onClick={()=>{setMode(mode==="login"?"signup":"login");setError("");setInfo("");}}
+            style={{background:"none",border:"none",color:T.accent,cursor:"pointer",fontSize:13,fontWeight:700,padding:0}}>
+            {mode==="login" ? "Sign Up" : "Log In"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function Hiroba() {
+  const [user, setUser]            = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [lots,setLots]             = useState([]);
   const [ideas,setIdeas]           = useState({});
   const [activeLot,setActiveLot]   = useState(null);
@@ -251,14 +324,31 @@ export default function Hiroba() {
   const [editingCard,setEditingCard]   = useState(null);
   const [filterCat,setFilterCat]       = useState("all");
 
+  // Check auth state on load
   useEffect(()=>{
-    loadData().then(d=>{
+    supabase.auth.getSession().then(({data})=>{
+      setUser(data.session?.user || null);
+      setAuthChecked(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session)=>{
+      setUser(session?.user || null);
+    });
+    return ()=> listener.subscription.unsubscribe();
+  },[]);
+
+  // Load data once we know who the user is
+  useEffect(()=>{
+    if(!user) return;
+    setLoaded(false);
+    loadData(user.id).then(d=>{
       if(d){ setLots(d.lots||DEFAULT_LOTS); setIdeas(d.ideas||{}); }
-      else { seedDefaultLots(); setLots(DEFAULT_LOTS); setIdeas({}); }
+      else { seedDefaultLots(user.id).then(()=>loadData(user.id)).then(d2=>{
+        setLots(d2?.lots||DEFAULT_LOTS); setIdeas(d2?.ideas||{});
+      }); }
       setLoaded(true);
     });
     loadSakura().then(setSakuraCards);
-  },[]);
+  },[user]);
 
   useEffect(()=>{ if(loaded) saveSakura(sakuraCards); },[sakuraCards,loaded]);
 
@@ -275,7 +365,7 @@ export default function Hiroba() {
     :[];
 
   async function addIdea(data) {
-    const idea = { id: Date.now().toString(), ...data, createdAt: Date.now(), lot_id: activeLot };
+    const idea = { id: Date.now().toString(), ...data, createdAt: Date.now(), lot_id: activeLot, user_id: user.id };
     await supabase.from('ideas').insert([idea]);
     setIdeas(p=>({...p,[activeLot]:[idea,...(p[activeLot]||[])]}));
   }
@@ -292,7 +382,7 @@ export default function Hiroba() {
     const id=`lot_${Date.now()}`;
     const opts=["#F472B6","#34D399","#A78BFA","#FB923C","#60A5FA","#FBBF24"];
     const accent=opts[Math.floor(Math.random()*opts.length)];
-    const lot={id,name,emoji,accent,glow:`${accent}22`};
+    const lot={id,name,emoji,accent,glow:`${accent}22`,user_id:user.id};
     await supabase.from('lots').insert([lot]);
     setLots(p=>[...p,lot]);
   }
@@ -315,6 +405,21 @@ export default function Hiroba() {
   function addCard(data){setSakuraCards(p=>[{id:Date.now().toString(),...data,createdAt:Date.now(),score:{know:0,dontknow:0}},...p]);}
   function updateCard(id,data){setSakuraCards(p=>p.map(c=>c.id===id?{...c,...data}:c));}
   function deleteCard(id){setSakuraCards(p=>p.filter(c=>c.id!==id));}
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setUser(null);
+    setLots([]); setIdeas({}); setActiveLot(null);
+  }
+
+  // ── Auth gates ──
+  if(!authChecked) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:T.bg,fontFamily:"'Zen Kaku Gothic New',sans-serif",color:T.textDim,letterSpacing:3,fontSize:15}}>
+      広場 · · ·
+    </div>
+  );
+
+  if(!user) return <AuthScreen onAuthed={setUser}/>;
 
   if(!loaded) return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:T.bg,fontFamily:"'Zen Kaku Gothic New',sans-serif",color:T.textDim,letterSpacing:3,fontSize:15}}>
@@ -357,11 +462,17 @@ export default function Hiroba() {
             {isSakura&&<div style={{fontSize:11,color:SK.pink,marginTop:2,opacity:0.7}}>さくらの世界 · Japanese Study Sanctuary</div>}
           </div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:8,background:isSakura?SK.bgCard:T.bgCard,border:`1px solid ${isSakura?SK.border:T.border}`,borderRadius:10,padding:"7px 14px",minWidth:200}}>
-          <span style={{color:isSakura?SK.pink:T.textDim,display:"flex",opacity:0.6}}>{IC.search}</span>
-          <input style={{border:"none",background:"none",outline:"none",fontFamily:"'Zen Kaku Gothic New',sans-serif",fontSize:13.5,color:isSakura?SK.pink:T.text,width:"100%"}}
-            placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)}/>
-          {search&&<button style={{background:"none",border:"none",cursor:"pointer",color:T.textDim,display:"flex",padding:0}} onClick={()=>setSearch("")}>{IC.close}</button>}
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,background:isSakura?SK.bgCard:T.bgCard,border:`1px solid ${isSakura?SK.border:T.border}`,borderRadius:10,padding:"7px 14px",minWidth:160}}>
+            <span style={{color:isSakura?SK.pink:T.textDim,display:"flex",opacity:0.6}}>{IC.search}</span>
+            <input style={{border:"none",background:"none",outline:"none",fontFamily:"'Zen Kaku Gothic New',sans-serif",fontSize:13.5,color:isSakura?SK.pink:T.text,width:"100%"}}
+              placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)}/>
+            {search&&<button style={{background:"none",border:"none",cursor:"pointer",color:T.textDim,display:"flex",padding:0}} onClick={()=>setSearch("")}>{IC.close}</button>}
+          </div>
+          <button onClick={handleLogout} title={user.email}
+            style={{display:"flex",alignItems:"center",gap:6,background:"none",border:`1px solid ${isSakura?SK.border:T.border}`,borderRadius:10,padding:"7px 12px",cursor:"pointer",color:isSakura?SK.pink:T.textDim,fontSize:12,fontFamily:"'Zen Kaku Gothic New',sans-serif"}}>
+            {IC.logout} Log Out
+          </button>
         </div>
       </header>
 
