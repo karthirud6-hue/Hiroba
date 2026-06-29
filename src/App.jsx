@@ -181,7 +181,7 @@ async function askHiroshi(messages,allIdeas,allLots,personality,mode) {
   const brainstormGuide=mode==="brainstorm"
     ?"BRAINSTORM mode: ask ONE probing question to flesh out ideas. Challenge assumptions. End every message with a question."
     :"Normal chat mode.";
-  const system=`You are Hiroshi (ひろし) — Rudhra's personal AI friend inside Hiroba.
+  const system=`You are Hiroshi (ひろし) — the user's personal AI friend inside Hiroba.
 ${personalityGuide} ${brainstormGuide}
 - Know ALL parked ideas, reference them naturally
 - Notice old ideas, spot patterns across lots
@@ -197,20 +197,20 @@ async function askHiroshiJapanese(messages, cards) {
   const cardContext = cards.map(c=>
     `• ${c.japanese} (${c.romaji}) = ${c.english} [${c.category}, ${c.jlpt}]`
   ).join("\n");
-  const system=`あなたはひろし（Hiroshi）です。RudhraのAI日本語の先生です。Sakura Worldに住んでいます。
+  const system=`あなたはひろし（Hiroshi）です。ユーザーのAI日本語の先生です。Sakura Worldに住んでいます。
 
 あなたの役割:
-- 日本語でRudhraと会話する（英訳を括弧内に添える）
-- Rudhraが保存した単語・文法・漢字を使って例文を作る
+- 日本語でユーザーと会話する（英訳を括弧内に添える）
+- ユーザーが保存した単語・文法・漢字を使って例文を作る
 - 質問に答え、間違いを優しく訂正する
 - 楽しく、温かく、励ましながら教える
 - 時々絵文字を使う 🌸
 
-Rudhraの学習カード:
+ユーザーの学習カード:
 ${cardContext||"まだカードがありません。一緒に始めましょう！"}
 
 Format: Always write Japanese first, then (English translation) in parentheses.
-Example: こんにちは、Rudhra！(Hello, Rudhra!) 今日は何を勉強しますか？(What will you study today?)`;
+Example: こんにちは！(Hello!) 今日は何を勉強しますか？(What will you study today?)`;
 
   const history = messages.filter(m=>m.id!=="0");
   return await callGemini(system, history);
@@ -1086,8 +1086,8 @@ function AddLotModal({onSave,onClose}) {
   );
 }
 
-const HIROSHI_GREETING={id:"0",role:"assistant",text:`やあ、Rudhra！ I'm Hiroshi 🌿\n\nI know everything in your lots. What's on your mind?\n\n— or pick a mode below to get started 👇`};
-const HIROSHI_SAKURA_GREETING={id:"0",role:"assistant",text:`いらっしゃいませ、Rudhra！🌸 (Welcome, Rudhra!)\n\nさくらの世界へようこそ！(Welcome to Sakura World!)\n\n日本語の練習を始めましょうか？(Shall we start practicing Japanese?)\n\n何を学びたいですか？(What would you like to learn?)`};
+const HIROSHI_GREETING={id:"0",role:"assistant",text:`Hey there！ I'm Hiroshi 🌿\n\nI know everything in your lots. What's on your mind?\n\n— or pick a mode below to get started 👇`};
+const HIROSHI_SAKURA_GREETING={id:"0",role:"assistant",text:`いらっしゃいませ！🌸 (Welcome!)\n\nさくらの世界へようこそ！(Welcome to Sakura World!)\n\n日本語の練習を始めましょうか？(Shall we start practicing Japanese?)\n\n何を学びたいですか？(What would you like to learn?)`};
 
 async function loadHiroshiHistory(key) {
   try{const r=await window.storage.get(key);return r?JSON.parse(r.value):null;}catch{return null;}
